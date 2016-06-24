@@ -1,0 +1,25 @@
+.video-container {
+    position: relative;
+}
+
+#remote-video {
+    padding: 0;
+}
+
+#remote-video video {
+    width: 100%;
+    height: auto;
+}
+
+#local-video {
+    position: absolute;
+    right: 16px;
+    bottom: 0;
+    padding: 0;
+    min-height: 0;
+}
+
+#local-video video {
+    width: 250px;
+    height: auto;
+}

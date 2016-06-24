@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC DEMO</title>
+
+    <link rel="stylesheet" href="/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/bootstrap-material-design/dist/css/bootstrap-material-design.min.css">
+    <link rel="stylesheet" href="/bootstrap-material-design/dist/css/ripples.min.css">
+
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="container">
+    <div class="well">
+        <form id="join-form">
+            <div class="form-group label-floating">
+                <label for="room-text-field" class="control-label">Room</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="room-text-field" required>
+                    <span class="input-group-btn">
+                        <button class="btn btn-primary">JOIN</button>
+                    </span>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="video-container">
+        <div class="well" id="remote-video">
+            <video autoplay></video>
+        </div>
+        <div class="well" id="local-video">
+            <video autoplay muted></video>
+        </div>
+    </div>
+</div>
+
+<script src="/jquery/dist/jquery.min.js"></script>
+<script src="/bootstrap/dist/js/bootstrap.min.js"></script>
+<script src="/bootstrap-material-design/dist/js/material.min.js"></script>
+<script src="/bootstrap-material-design/dist/js/ripples.min.js"></script>
+
+<script src="/webrtc-adapter/adapter.js"></script>
+<script src="/stun.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+    var localVideo, remoteVideo;
+    var pc;
+    var localStream;
+    var remoteSocketId;
+    var socket = io();
+
+    var constraint = {
+        video: true,
+        audio: true
+    };
+
+    function log(data) {
+        console.log(data);
+    }
+
+    function logEvt(name, detail) {
+        return function (e) {
+            console.log(name, detail ? e : null);
+        }
+    }
+
+    function url(stream) {
+        return URL.createObjectURL(stream);
+    }
+
+    function join(e) {
+        e.preventDefault();
+
+        socket.emit('join', {room: $('#room-text-field').val()});
+
+        pc = new RTCPeerConnection({iceServers: iceServers});
+        pc.onaddstream = function (e) {
+            console.log('onaddstream');
+            remoteVideo.src = url(e.stream);
+        };
+        pc.onicecandidate = function (e) {
+            console.log('onicecandidate');
+            socket.emit('ice', {candidate: e.candidate});
+        };
+        pc.onnegotiationneeded = function (e) {
+            console.log('onnegotiationneeded');
+            pc.createOffer()
+                    .then(function (desc) {
+                        return pc.setLocalDescription(desc);
+                    })
+                    .then(function () {
+                        socket.emit('offer', {sdp: pc.localDescription});
+                    })
+                    .catch(log);
+        };
+
+        navigator.getUserMedia(constraint, function (stream) {
+            localVideo.src = url(stream);
+
+            if (localStream) {
+                pc.removeStream(localStream);
+            }
+
+            localStream = stream;
+
+            socket.emit('ready', {caller: true});
+        }, log)
+    }
+
+    function didGetOffer(data) {
+        console.log('get offer');
+
+        pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
+                .then(function () {
+                    return pc.createAnswer();
+                })
+                .then(function (desc) {
+                    return pc.setLocalDescription(desc);
+                })
+                .then(function () {
+                    socket.emit('answer', {sdp: pc.localDescription});
+                })
+                .catch(log);
+    }
+
+    function didGotIce(data) {
+        console.log('get candidate');
+
+        if (data.candidate)
+            pc.addIceCandidate(data.candidate);
+    }
+
+    function didGetAnswer(data) {
+        console.log('get answer');
+
+        pc.setRemoteDescription(new RTCSessionDescription(data.sdp)).catch(log);
+    }
+
+    function didReady(data) {
+        if (data.caller) {
+//            socket.emit('ready', {});
+        }
+
+        pc.addStream(localStream);
+    }
+
+    socket.on('ready', didReady);
+    socket.on('ice', didGotIce);
+    socket.on('offer', didGetOffer);
+    socket.on('answer', didGetAnswer);
+
+    $(document).ready(function () {
+        $.material.init();
+        $('#join-form').submit(join);
+
+        localVideo = $('#local-video').find('video')[0];
+        remoteVideo = $('#remote-video').find('video')[0];
+
+    });
+</script>
+</body>
+</html>
