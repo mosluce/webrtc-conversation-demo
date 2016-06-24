@@ -75,12 +75,12 @@
     function join(e) {
         e.preventDefault();
 
-        socket.emit('join', {room: $('#room-text-field').val()});
-
         pc = new RTCPeerConnection({iceServers: iceServers});
         pc.onaddstream = function (e) {
             console.log('onaddstream');
             remoteVideo.src = url(e.stream);
+
+            pc.addStream(localStream);
         };
         pc.onicecandidate = function (e) {
             console.log('onicecandidate');
@@ -107,7 +107,7 @@
 
             localStream = stream;
 
-            socket.emit('ready', {caller: true});
+            socket.emit('join', {room: $('#room-text-field').val()});
         }, log)
     }
 
@@ -140,18 +140,32 @@
         pc.setRemoteDescription(new RTCSessionDescription(data.sdp)).catch(log);
     }
 
-    function didReady(data) {
-        if (data.caller) {
-//            socket.emit('ready', {});
-        }
+    function didDeny() {
+        alert('房間人數已滿！');
+
+        localStream.getTracks().forEach(function (track) {
+            track.stop();
+        });
+    }
+
+    function didLeave() {
+        console.log('leave');
+
+        pc.removeStream(localStream);
+    }
+
+    function didJoin() {
+        console.log('join');
 
         pc.addStream(localStream);
     }
 
-    socket.on('ready', didReady);
+    socket.on('deny', didDeny);
+    socket.on('join', didJoin);
     socket.on('ice', didGotIce);
     socket.on('offer', didGetOffer);
     socket.on('answer', didGetAnswer);
+    socket.on('leave', didLeave);
 
     $(document).ready(function () {
         $.material.init();
